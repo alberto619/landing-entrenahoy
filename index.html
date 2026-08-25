@@ -723,17 +723,56 @@ fbq('init','1698998988025454');fbq('track','PageView');
 
 <script>
 const CHECKOUT_URL="https://pay.hotmart.com/U107271644L";
-const q=new URLSearchParams(location.search),keys=["utm_source","utm_medium","utm_campaign","utm_content","utm_term"],attr={};
-keys.forEach(k=>{const v=q.get(k);if(v)sessionStorage.setItem("eh_"+k,v);attr[k]=v||sessionStorage.getItem("eh_"+k)||""});attr.creative=attr.utm_content||"direct";
-function ev(n,x={}){if(typeof fbq==="function")fbq("trackCustom",n,{...attr,...x})}
+
+// Conserva la procedencia del anuncio durante toda la visita.
+const q=new URLSearchParams(location.search);
+const keys=["utm_source","utm_medium","utm_campaign","utm_content","utm_term","utm_id","fbclid"];
+const attr={};
+
+keys.forEach(k=>{
+  const incoming=q.get(k);
+  if(incoming) sessionStorage.setItem("eh_"+k,incoming);
+  attr[k]=incoming || sessionStorage.getItem("eh_"+k) || "";
+});
+
+attr.creative=attr.utm_content || "direct";
+
+// Construye el checkout conservando UTMs/fbclid y añade el creativo en "src".
+// "src" se probará en Hotmart antes de tratarlo como fuente definitiva.
+function buildCheckoutUrl(){
+  const u=new URL(CHECKOUT_URL);
+
+  ["utm_source","utm_medium","utm_campaign","utm_content","utm_term","utm_id","fbclid"].forEach(k=>{
+    if(attr[k]) u.searchParams.set(k,attr[k]);
+  });
+
+  if(attr.creative && attr.creative!=="direct"){
+    u.searchParams.set("src",attr.creative);
+  }
+
+  return u.toString();
+}
+
+function ev(n,x={}){
+  if(typeof fbq==="function") fbq("trackCustom",n,{...attr,...x});
+}
+
 document.querySelectorAll(".checkout").forEach(a=>{
-  a.href=CHECKOUT_URL;
+  a.href=buildCheckoutUrl();
+
   a.addEventListener("click",()=>{
-    ev("ENTCheckoutClick",{placement:a.id==="floatingCta"?"floating":"page"});
+    a.href=buildCheckoutUrl();
+
+    ev("ENTCheckoutClick",{
+      placement:a.id==="floatingCta"?"floating":"page",
+      checkout_src:attr.creative
+    });
+
     if(typeof fbq==="function"){
       fbq("track","InitiateCheckout",{value:59.00,currency:"MXN"});
     }
-    if(a.id==="floatingCta")ev("ENTFloatingCheckoutClick");
+
+    if(a.id==="floatingCta") ev("ENTFloatingCheckoutClick");
   });
 });
 
