@@ -757,22 +757,52 @@ function ev(n,x={}){
   if(typeof fbq==="function") fbq("trackCustom",n,{...attr,...x});
 }
 
+// Tracking de checkout reconstruido.
+// El clic se detiene unos milisegundos para que Meta pueda encolar InitiateCheckout
+// ANTES de abandonar la landing hacia Hotmart.
 document.querySelectorAll(".checkout").forEach(a=>{
   a.href=buildCheckoutUrl();
 
-  a.addEventListener("click",()=>{
-    a.href=buildCheckoutUrl();
+  a.addEventListener("click",function(e){
+    // Permite abrir en nueva pestaña/ventana sin interferir con gestos especiales.
+    if(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button!==0) return;
 
-    ev("ENTCheckoutClick",{
-      placement:a.id==="floatingCta"?"floating":"page",
-      checkout_src:attr.creative
-    });
+    e.preventDefault();
 
+    const destination=buildCheckoutUrl();
+    const placement=a.id==="floatingCta"?"floating":"page";
+
+    // Evento estándar que usa Meta para Inicio de pago.
     if(typeof fbq==="function"){
-      fbq("track","InitiateCheckout",{value:99.00,currency:"MXN"});
+      fbq("track","InitiateCheckout",{
+        value:99.00,
+        currency:"MXN",
+        content_name:"Entrena Hoy",
+        content_type:"product"
+      });
+
+      // Diagnóstico separado: confirma qué CTA originó el clic.
+      fbq("trackCustom","ENTCheckoutClick",{
+        ...attr,
+        placement,
+        checkout_src:attr.creative
+      });
+
+      if(a.id==="floatingCta"){
+        fbq("trackCustom","ENTFloatingCheckoutClick",{
+          ...attr,
+          placement:"floating"
+        });
+      }
     }
 
-    if(a.id==="floatingCta") ev("ENTFloatingCheckoutClick");
+    // Evita doble clic mientras se completa el envío del pixel.
+    a.style.pointerEvents="none";
+
+    // Navega al checkout después de dar tiempo al request del Pixel.
+    setTimeout(function(){
+      window.location.href=destination;
+    },450);
   });
 });
 
